@@ -22,9 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String longitude = "-";
   String locationStatus = "Checking";
   bool isLoading = true;
-
-
-///aligning the card's for a tutorial box
+  /// for widget  or a cards to highlight
   GlobalKey deviceKey = GlobalKey();
   GlobalKey latKey = GlobalKey();
   GlobalKey longKey = GlobalKey();
@@ -47,10 +45,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Future.delayed(const Duration(milliseconds: 500), checkAndShowTutorial);
   }
 
-  ///  SHOW ONLY ONCE time when app run
   Future<void> checkAndShowTutorial() async {
     final prefs = await SharedPreferences.getInstance();
-    bool seen = prefs.getBool("tutorial_seen") ?? false;
+    bool seen = prefs.getBool("tutorial_seen") ?? false; ///for only 1time tutorial shows
 
     if (!seen) {
       showTutorial();
@@ -103,13 +100,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void showTutorial() {
     tutorial = TutorialCoachMark(
       targets: createTargets(),
-      colorShadow: Colors.black.withOpacity(0.8),
-      paddingFocus: 12,
-      pulseEnable: true,
+      colorShadow: Colors.transparent,
+      paddingFocus: 0,
+      pulseEnable: false,
       hideSkip: true,
     )..show(context: context);
   }
-  /// tutorial messages
 
   List<TargetFocus> createTargets() {
     return [
@@ -124,12 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return TargetFocus(
       keyTarget: key,
       shape: ShapeLightFocus.RRect,
-      radius: 16,
+      radius: 0,
       contents: [
         TargetContent(
           align: ContentAlign.bottom,
           builder: (context, controller) {
             return AnimatedTooltip(
+              key: UniqueKey(), // 🔥 IMPORTANT FIX
               controller: controller,
               text: text,
             );
@@ -196,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(15),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6)
+          BoxShadow(color: Colors.lightBlueAccent, blurRadius: 6)
         ],
       ),
       child: ListTile(
@@ -206,7 +203,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  ///shimmer for home page
 
   Widget buildShimmer() {
     return Column(
@@ -231,45 +227,75 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// TOOLTIP WITH TIMER FOR EACH STEP
+///  FINAL TOOLTIP (FIXED FOR ALL CARDS)
 class AnimatedTooltip extends StatefulWidget {
   final dynamic controller;
   final String text;
 
-  const AnimatedTooltip({this.controller, required this.text});
+  const AnimatedTooltip({
+    super.key,
+    this.controller,
+    required this.text,
+  });
 
   @override
   State<AnimatedTooltip> createState() => _AnimatedTooltipState();
 }
 
-class _AnimatedTooltipState extends State<AnimatedTooltip>
-    with TickerProviderStateMixin {
-  late AnimationController _timer;
-  bool showClose = false;
+class _AnimatedTooltipState extends State<AnimatedTooltip> {
+  Timer? timer;
+  int timeLeft = 5;
+  bool isDone = false;
 
   @override
   void initState() {
     super.initState();
+    startTimer();
+  }
 
-    _timer = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )
-      ..forward()
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          setState(() => showClose = true);
+  void startTimer() {
+    timer?.cancel();
+
+    timeLeft = 5;
+    isDone = false;
+
+    timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+
+      setState(() {
+        timeLeft--;
+
+        if (timeLeft <= 0) {
+          t.cancel();
+
+          if (!isDone) {
+            isDone = true;
+            widget.controller.next();
+          }
         }
       });
-
-    Future.delayed(const Duration(seconds: 7), () {
-      widget.controller.next();
     });
+  }
+
+  void handleNext() {
+    if (isDone) return;
+
+    isDone = true;
+    timer?.cancel();
+    widget.controller.next();
+  }
+
+  void handleClose() {
+    if (isDone) return;
+
+    isDone = true;
+    timer?.cancel();
+    widget.controller.skip();
   }
 
   @override
   void dispose() {
-    _timer.dispose();
+    timer?.cancel();
     super.dispose();
   }
 
@@ -277,61 +303,64 @@ class _AnimatedTooltipState extends State<AnimatedTooltip>
   Widget build(BuildContext context) {
     return Container(
       width: 260,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.black26,
+        color: Colors.blueGrey,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// TIMER + CLOSE
-          Positioned(
-            right: 0,
-            top: 0,
-            child: SizedBox(
-              width: 35,
-              height: 35,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _timer,
-                    builder: (_, __) {
-                      return CircularProgressIndicator(
-                        value: _timer.value,
-                        strokeWidth: 3,
-                        color: Colors.white,
-                      );
-                    },
+
+          ///  TEXT + CLOSE BOX ICON
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  widget.text,
+                  style: const TextStyle(color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15
                   ),
-                  if (showClose)
-                    GestureDetector(
-                      onTap: () => widget.controller.skip(),
-                      child: const Icon(Icons.close_rounded, color: Colors.red),
-                    ),
-                ],
+
+                ),
+              ),
+
+              /// ❌ CLOSE ICON IN BOX
+              GestureDetector(
+                onTap: handleClose,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.close, color: Colors.red, size: 18),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          /// 👉 NEXT BUTTON WITH TIMER ONLY
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton(
+              onPressed: handleNext,/// for use click any time
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueGrey,
+                foregroundColor: Colors.black
+              ),
+              child: Text(
+                "Next $timeLeft s",
+
+                style: const TextStyle(color: Colors.white),
+
               ),
             ),
           ),
-          ///tutorial box
-
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.text,
-                  style: const TextStyle(color: Colors.white)),
-              const SizedBox(height: 12),
-              if (showClose)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton(
-                    onPressed: () => widget.controller.next(),
-                    child: const Text("Next",
-                    style: TextStyle(color: Colors.lightBlue),),
-                  ),
-                )
-            ],
-          )
         ],
       ),
     );
